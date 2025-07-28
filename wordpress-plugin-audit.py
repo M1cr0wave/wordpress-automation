@@ -100,7 +100,7 @@ def run_semgrep_and_store_results(db_conn, cursor, download_dir, config, verbose
 
     plugins = os.listdir(os.path.join(download_dir, "plugins"))
 
-    for plugin in tqdm(plugins, desc="Auditing plugins"):
+    for plugin in tqdm(plugins, desc="Auditing plugins with Semgrep"):
         plugin_path = os.path.join(download_dir, "plugins", plugin)
         output_file = os.path.join(plugin_path, "semgrep_output.json")
 
@@ -137,6 +137,76 @@ def run_semgrep_and_store_results(db_conn, cursor, download_dir, config, verbose
                 db_conn.commit()
 
 
+def run_codeql_and_store_results(db_conn, cursor, download_dir, verbose=False):
+    plugins = os.listdir(os.path.join(download_dir, "plugins"))
+    codeql_database_dir = os.path.join(download_dir, "codeql-databases")
+    os.makedirs(codeql_database_dir, exist_ok=True)
+
+    for plugin in tqdm(plugins, desc="Auditing plugins with CodeQL"):
+        plugin_path = os.path.join(download_dir, "plugins", plugin)
+        database_path = os.path.join(codeql_database_dir, plugin)
+        output_file = os.path.join(plugin_path, "codeql_output.sarif")
+
+        # Create CodeQL database
+        create_db_command = [
+            "codeql",
+            "database",
+            "create",
+            database_path,
+            f"--source-root={plugin_path}",
+            "--language=javascript",
+            "--overwrite",
+        ]
+        try:
+            subprocess.run(create_db_command, check=True, capture_output=True)
+            if verbose:
+                print(f"CodeQL database created for {plugin}.")
+        except subprocess.CalledProcessError as e:
+            print(f"CodeQL database creation failed for {plugin}: {e.stderr.decode()}")
+            continue
+
+        # Analyze the database
+        analyze_command = [
+            "codeql",
+            "database",
+            "analyze",
+            database_path,
+            "--format=sarif-latest",
+            f"--output={output_file}",
+            "javascript-security-and-quality.qls",
+        ]
+        try:
+            subprocess.run(analyze_command, check=True, capture_output=True)
+            if verbose:
+                print(f"CodeQL analysis completed for {plugin}.")
+        except subprocess.CalledProcessError as e:
+            print(f"CodeQL analysis failed for {plugin}: {e.stderr.decode()}")
+            continue
+
+        # Process SARIF results
+        with open(output_file, "r") as f:
+            sarif_data = json.load(f)
+            for run in sarif_data.get("runs", []):
+                for result in run.get("results", []):
+                    # Adapt this part to match your database schema and needs
+                    message = result.get("message", {}).get("text", "")
+                    locations = result.get("locations", [])
+                    if locations:
+                        location = locations[0].get("physicalLocation", {})
+                        file_path = location.get("artifactLocation", {}).get("uri", "")
+                        start_line = location.get("region", {}).get("startLine", 0)
+                        # Create a dictionary that matches insert_result_into_db's expectations
+                        item = {
+                            "path": file_path,
+                            "check_id": result.get("ruleId", "N/A"),
+                            "start": {"line": start_line},
+                            "end": {"line": start_line},
+                            "extra": {"lines": message},
+                        }
+                        insert_result_into_db(cursor, plugin, item)
+                        db_conn.commit()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Downloads or audits all Wordpress plugins."
@@ -156,6 +226,13 @@ if __name__ == "__main__":
         "--audit",
         action="store_true",
         help="Audits downloaded plugins sequentially",
+    )
+    parser.add_argument(
+        "--tool",
+        type=str,
+        choices=["semgrep", "codeql"],
+        default="semgrep",
+        help="The SAST tool to use for auditing (default: semgrep)",
     )
     parser.add_argument(
         "--config",
@@ -196,9 +273,14 @@ if __name__ == "__main__":
                 db_conn, cursor, args.download_dir, args.verbose
             )
         if args.audit:
-            run_semgrep_and_store_results(
-                db_conn, cursor, args.download_dir, args.config, args.verbose
-            )
+            if args.tool == "semgrep":
+                run_semgrep_and_store_results(
+                    db_conn, cursor, args.download_dir, args.config, args.verbose
+                )
+            elif args.tool == "codeql":
+                run_codeql_and_store_results(
+                    db_conn, cursor, args.download_dir, args.verbose
+                )
 
         cursor.close()
         db_conn.close()
