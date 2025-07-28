@@ -20,7 +20,7 @@ This project is a collection of scripts designed to download and analyze WordPre
 2.  Clone this repository:
 
     ```bash
-    git clone [https://github.com/your-username/wordpress-plugin-security-auditor](https://github.com/your-username/wordpress-plugin-security-auditor)
+    git clone [https://github.com/M1cr0wave/wordpress-automation](https://github.com/M1cr0wave/wordpress-automation)
     ```
 
 3.  Configure the `config.ini` file with your database credentials:
