@@ -1,6 +1,6 @@
 # WordPress Plugin Security Auditor
 
-A project by **Nikhil Kanade, University of Waterloo**
+A project by **Nikhil Kanade**
 
 This project is a collection of scripts designed to download and analyze WordPress plugins for security vulnerabilities. It uses static application security testing (SAST) tools like Semgrep and CodeQL to scan the plugin source code and identify potential security issues.
 
@@ -20,7 +20,7 @@ This project is a collection of scripts designed to download and analyze WordPre
 2.  Clone this repository:
 
     ```bash
-    git clone [https://github.com/M1cr0wave/wordpress-automation](https://github.com/M1cr0wave/wordpress-automation)
+    git clone https://github.com/M1cr0wave/wordpress-automation
     ```
 
 3.  Configure the `config.ini` file with your database credentials:
